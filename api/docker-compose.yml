@@ -1,0 +1,39 @@
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: livraria
+    volumes:
+      - dados_mysql:/var/lib/mysql
+    networks:
+      - rede_livros
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  api:
+    build: .
+    image: cadastro-livros-api
+    ports:
+      - "3000:3000"
+    networks:
+      - rede_livros
+    restart: unless-stopped
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+networks:
+  rede_livros:
+    driver: bridge
+
+volumes:
+  dados_mysql:

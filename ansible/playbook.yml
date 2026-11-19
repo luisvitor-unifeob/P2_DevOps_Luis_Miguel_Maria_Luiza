@@ -1,0 +1,91 @@
+
+---
+- name: Configurar Servidores da prova
+  hosts: Servidores
+  become: true
+
+  vars:
+    pacotes:
+      - curl
+      - git
+      - docker.io
+      - docker-compose-v2
+
+  tasks:
+    - name: Atualizar cache do APT
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Instalar pacotes
+      ansible.builtin.apt:
+        name: "{{ pacotes }}"
+        state: present
+
+    - name: Garantir docker ativo
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Adicionar o aluno ao grupo docker
+      ansible.builtin.user:
+        name: aluno
+        groups: docker
+        append: true
+
+    - name: Criar pasta da aplicacao web na VM1
+      ansible.builtin.file:
+        path: /home/aluno/app
+        state: directory
+        owner: aluno
+        group: aluno
+        mode: "0755"
+      when: inventory_hostname == "prova-vm1"
+
+    - name: Copiar arquivos da aplicacao web
+      ansible.builtin.copy:
+        src: ../app/
+        dest: /home/aluno/app/
+        owner: aluno
+        group: aluno
+      when: inventory_hostname == "prova-vm1"
+
+    - name: Construir imagem Docker da aplicacao web
+      ansible.builtin.command:
+        cmd: docker build -t cadastro-livros-web .
+        chdir: /home/aluno/app
+      when: inventory_hostname == "prova-vm1"
+
+    - name: Iniciar container da aplicacao web
+      ansible.builtin.shell: |
+        docker rm -f cadastro-livros-web 2>/dev/null || true
+        docker run -d \
+          --name cadastro-livros-web \
+          --restart unless-stopped \
+          -p 80:80 \
+          cadastro-livros-web
+      when: inventory_hostname == "prova-vm1"
+
+    - name: Criar pasta da API na VM2
+      ansible.builtin.file:
+        path: /home/aluno/api
+        state: directory
+        owner: aluno
+        group: aluno
+        mode: "0755"
+      when: inventory_hostname == "prova-vm2"
+
+    - name: Copiar arquivos da API
+      ansible.builtin.copy:
+        src: ../api/
+        dest: /home/aluno/api/
+        owner: aluno
+        group: aluno
+      when: inventory_hostname == "prova-vm2"
+
+    - name: Iniciar API e MySQL com Docker Compose
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.yml up -d --build
+        chdir: /home/aluno/api
+      when: inventory_hostname == "prova-vm2"
